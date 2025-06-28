@@ -90,3 +90,6 @@ zipp==3.23.0
 # M-Pesa Daraja API dependencies
 phonenumbers==8.13.47
 flask==3.1.0
+
+# Twilio WhatsApp integration
+twilio==9.3.7

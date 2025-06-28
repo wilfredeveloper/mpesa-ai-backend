@@ -38,7 +38,24 @@ python app/main.py
 # API docs at http://localhost:8000/docs
 ```
 
-### 3. Configure M-Pesa (Optional)
+### 3. Run Unified Webhook Server (M-Pesa + WhatsApp)
+
+For webhook integrations (M-Pesa callbacks and WhatsApp messages):
+
+```bash
+# Start the unified webhook server on port 5455
+python callback_server.py
+
+# In another terminal, expose with ngrok
+ngrok http 5455
+```
+
+**Endpoints:**
+- 📱 M-Pesa: `http://localhost:5455/mpesa/callback`
+- 💬 WhatsApp: `http://localhost:5455/whatsapp/webhook`
+- 🧪 Test: `http://localhost:5455/whatsapp/test`
+
+### 4. Configure M-Pesa (Optional)
 
 For actual M-Pesa payments, configure your credentials:
 
@@ -52,6 +69,21 @@ For actual M-Pesa payments, configure your credentials:
    MPESA_CALLBACK_URL=https://your-domain.com/mpesa/callback
    MPESA_ENVIRONMENT=sandbox
    ```
+
+### 5. Configure WhatsApp (Optional)
+
+For WhatsApp integration via Twilio:
+
+1. Get credentials from [Twilio Console](https://console.twilio.com/)
+2. Add to `.env` file:
+   ```env
+   TWILIO_ACCOUNT_SID=your_account_sid
+   TWILIO_AUTH_TOKEN=your_auth_token
+   TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
+   ```
+3. Configure webhook URL in Twilio: `https://your-ngrok-url.ngrok.io/whatsapp/webhook`
+
+📖 **Detailed Setup:** See [docs/WHATSAPP_SETUP.md](docs/WHATSAPP_SETUP.md)
 
 ## 📚 Documentation
 
