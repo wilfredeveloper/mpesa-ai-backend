@@ -20,10 +20,7 @@ pip install -r requirements.txt
 
 ### 2. Configure M-Pesa Credentials
 
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
+1. The project uses a single `.env` file in the root directory for all configuration.
 
 2. Get your M-Pesa credentials from [Safaricom Developer Portal](https://developer.safaricom.co.ke/):
    - Consumer Key
@@ -51,15 +48,16 @@ python test_mpesa.py
 
 ### 4. Use the Agent
 
-```python
-from mpesa_agent.agent import root_agent
-
-# The agent now has M-Pesa capabilities
-# You can ask it things like:
-# - "Send 100 KSh to 0712345678"
-# - "Check the status of transaction ABC123"
-# - "Validate this phone number: +254712345678"
+Run the agent with Google ADK:
+```bash
+source env/bin/activate
+adk web
 ```
+
+The agent can handle natural language commands like:
+- "Send 100 KSh to 0712345678"
+- "Check the status of transaction ABC123"
+- "Validate this phone number: +254712345678"
 
 ## Available Tools
 
