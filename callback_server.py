@@ -58,8 +58,215 @@ def log_callback(data, callback_type="unknown"):
     print(f"Data: {json.dumps(data, indent=2)}")
     print(f"{'='*50}\n")
 
+def call_ai_agent(user_id, message, profile_name=None, phone_number=None):
+    """Call the AI agent API with user context and message"""
+    try:
+        # AI Agent API configuration
+        AGENT_API_URL = os.getenv('AGENT_API_URL', 'http://localhost:8000')
+
+        # Create session ID based on user
+        session_id = f"whatsapp_{user_id}"
+
+        print(f"🤖 Calling AI Agent API for user {user_id}")
+
+        # Step 1: Create or get session with user profile
+        session_data = {
+            "app_name": "mpesa_agent",
+            "user_id": user_id,
+            "session_id": session_id,
+            "state": {
+                "user_profile": {
+                    "name": profile_name,
+                    "phone": phone_number,
+                    "whatsapp_id": user_id,
+                    "platform": "whatsapp"
+                },
+                "conversation_context": {
+                    "channel": "whatsapp",
+                    "last_message_time": datetime.datetime.now().isoformat()
+                }
+            }
+        }
+
+        # Try to create session (will fail if exists, which is fine)
+        try:
+            session_response = requests.post(
+                f"{AGENT_API_URL}/sessions",
+                json=session_data,
+                timeout=5
+            )
+            if session_response.status_code == 200:
+                print(f"✅ Created new session for {profile_name}")
+            else:
+                print(f"📝 Session exists or creation failed: {session_response.status_code}")
+        except Exception as e:
+            print(f"📝 Session creation skipped: {e}")
+
+        # Step 2: Send message to agent
+        agent_request = {
+            "app_name": "mpesa_agent",
+            "user_id": user_id,
+            "session_id": session_id,
+            "message": message
+        }
+
+        print(f"📤 Sending message to agent: {message}")
+
+        agent_response = requests.post(
+            f"{AGENT_API_URL}/run",
+            json=agent_request,
+            timeout=80
+        )
+
+        if agent_response.status_code == 200:
+            response_data = agent_response.json()
+
+            # Extract the agent's text response from events
+            agent_text = extract_agent_response(response_data.get('events', []))
+
+            if agent_text:
+                return agent_text
+            else:
+                print("⚠️  No agent text found in response")
+                return None
+        else:
+            print(f"❌ Agent API error: {agent_response.status_code} - {agent_response.text}")
+            return None
+
+    except Exception as e:
+        print(f"❌ Error calling AI agent: {e}")
+        return None
+
+def extract_agent_response(events):
+    """Extract the agent's text response from API events"""
+    try:
+        agent_texts = []
+
+        for event in events:
+            # Look for agent responses
+            if event.get('author') == 'mpesa_payment_agent' and event.get('content'):
+                content = event['content']
+                if isinstance(content, dict) and content.get('parts'):
+                    for part in content['parts']:
+                        if isinstance(part, dict) and part.get('text'):
+                            agent_texts.append(part['text'])
+                        elif isinstance(part, str):
+                            agent_texts.append(part)
+
+        if agent_texts:
+            return '\n'.join(agent_texts).strip()
+
+        return None
+
+    except Exception as e:
+        print(f"❌ Error extracting agent response: {e}")
+        return None
+
+def handle_payment_request(message, sender_phone, profile_name):
+    """Handle payment requests like 'Send 1000 to 0714025354' by initiating STK to sender"""
+    try:
+        import re
+
+        # Pattern to match payment requests: "send/pay [amount] to [number]"
+        payment_patterns = [
+            r'(?:send|pay|transfer)\s+(\d+)\s+(?:to|for)\s+(\d+)',  # "send 1000 to 0714025354"
+            r'(?:send|pay|transfer)\s+(\d+)',  # "send 1000" (simplified)
+            r'(\d+)\s+(?:to|for)\s+(\d+)',  # "1000 to 0714025354" (no verb)
+        ]
+
+        message_lower = message.lower().strip()
+        amount = None
+        recipient_number = None
+
+        # Try to match payment patterns
+        for pattern in payment_patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                amount = int(match.group(1))
+                if len(match.groups()) > 1:
+                    recipient_number = match.group(2)
+                break
+
+        # If no payment pattern found, return None
+        if not amount:
+            return None
+
+        print(f"💰 Payment request detected: {amount} KSh from {profile_name} ({sender_phone})")
+
+        # Import M-Pesa tools
+        try:
+            from app.mpesa_agent.mpesa_tools import initiate_stk_push
+        except ImportError as e:
+            print(f"❌ Could not import M-Pesa tools: {e}")
+            return f"❌ Hi {profile_name}! M-Pesa integration is not available right now. Please try again later."
+
+        # Clean sender phone number (remove whatsapp: prefix, ensure proper format)
+        clean_sender_phone = sender_phone.replace('whatsapp:', '').replace('+', '')
+
+        # For now, we initiate STK push to the sender (not peer-to-peer)
+        greeting = f"Hi {profile_name}! " if profile_name else "Hello! "
+
+        if recipient_number:
+            # User specified a recipient, but we'll charge the sender instead
+            response_msg = (
+                f"{greeting}I'll initiate a payment of {amount} KSh from your number.\n\n"
+                f"📱 You'll receive an STK push prompt on {sender_phone}\n"
+                f"💡 Note: Direct transfers aren't supported yet, so the payment will be from your account.\n\n"
+                f"Processing payment..."
+            )
+        else:
+            # Simple payment request
+            response_msg = (
+                f"{greeting}I'll initiate a payment of {amount} KSh from your number.\n\n"
+                f"📱 You'll receive an STK push prompt on {sender_phone}\n\n"
+                f"Processing payment..."
+            )
+
+        # Initiate STK push to sender
+        try:
+            stk_result = initiate_stk_push(
+                phone_number=clean_sender_phone,
+                amount=amount,
+                account_reference="WhatsApp Payment",
+                transaction_desc=f"Payment via WhatsApp - {amount} KSh"
+            )
+
+            if stk_result.get('status') == 'success':
+                checkout_request_id = stk_result.get('checkout_request_id')
+                success_msg = (
+                    f"✅ {greeting}Payment request sent successfully!\n\n"
+                    f"💰 Amount: {amount} KSh\n"
+                    f"📱 Check your phone for M-Pesa prompt\n"
+                    f"🔢 Reference: {checkout_request_id[:8]}...\n\n"
+                    f"Complete the payment on your phone to proceed."
+                )
+                return success_msg
+            else:
+                error_msg = stk_result.get('error_message', 'Unknown error')
+                failure_msg = (
+                    f"❌ {greeting}Payment initiation failed.\n\n"
+                    f"💰 Amount: {amount} KSh\n"
+                    f"📝 Error: {error_msg}\n\n"
+                    f"Please try again or check your phone number."
+                )
+                return failure_msg
+
+        except Exception as e:
+            print(f"❌ STK push error: {e}")
+            error_msg = (
+                f"❌ {greeting}Sorry, there was an error processing your payment.\n\n"
+                f"💰 Amount: {amount} KSh\n"
+                f"📝 Error: {str(e)}\n\n"
+                f"Please try again later."
+            )
+            return error_msg
+
+    except Exception as e:
+        print(f"❌ Error handling payment request: {e}")
+        return None
+
 def process_whatsapp_message(message_data):
-    """Process incoming WhatsApp message with the agent"""
+    """Process incoming WhatsApp message with the AI agent via API"""
     try:
         # Extract message details with personalization
         from_number = message_data.get('From', '').replace('whatsapp:', '')
@@ -70,35 +277,48 @@ def process_whatsapp_message(message_data):
 
         print(f"📱 Processing WhatsApp message from {profile_name} ({from_number}): {message_body}")
 
-        if not AGENT_AVAILABLE:
-            print("⚠️  Agent not available - message logged only")
-            greeting = f"Hi {profile_name}! " if profile_name else "Hello! "
-            return f"🤖 {greeting}M-Pesa Assistant is temporarily unavailable. Please try again later."
-
         if not message_body:
             greeting = f"Hi {profile_name}! " if profile_name else "Hello! "
             return f"👋 {greeting}I'm your M-Pesa assistant. Send me a message like 'send 500 to 0712345678' to make payments!"
 
-        # TODO: Integrate with your existing agent
-        # You can call your agent here like:
-        # response = root_agent.process_message(message_body, user_context={
-        #     'phone': from_number,
-        #     'name': profile_name,
-        #     'wa_id': wa_id
-        # })
+        # Check if this is a payment request first
+        payment_result = handle_payment_request(message_body, from_number, profile_name)
+        if payment_result:
+            print(f"💰 Payment request processed: {payment_result}")
+            return payment_result
 
-        # Personalized greeting based on user's name
+        # Try to integrate with AI agent API for other requests
+        try:
+            agent_response = call_ai_agent(
+                user_id=wa_id or from_number,  # Use WhatsApp ID or phone as user ID
+                message=message_body,
+                profile_name=profile_name,
+                phone_number=from_number
+            )
+
+            if agent_response:
+                print(f"🤖 AI Agent response: {agent_response}")
+                return agent_response
+            else:
+                print("⚠️  AI Agent returned empty response, using fallback")
+
+        except Exception as e:
+            print(f"⚠️  AI Agent API error: {e}")
+            print("   Falling back to simple responses...")
+
+        # Fallback to simple responses if AI agent fails
         greeting = f"Hi {profile_name}! " if profile_name else "Hello! "
-
-        # For now, provide a helpful response based on message content
         message_lower = message_body.lower()
 
         if any(word in message_lower for word in ['send', 'pay', 'transfer', 'mpesa']):
             response_text = (
                 f"💰 {greeting}I can help you with M-Pesa payments!\n\n"
-                f"To send money, use this format:\n"
-                f"'Send [amount] to [phone number]'\n\n"
-                f"Example: 'Send 500 to 0712345678'\n\n"
+                f"To make a payment, use this format:\n"
+                f"'Send [amount]' or 'Send [amount] to [number]'\n\n"
+                f"Examples:\n"
+                f"• 'Send 500' - Pay 500 KSh from your number\n"
+                f"• 'Send 1000 to 0712345678' - Pay 1000 KSh\n\n"
+                f"💡 You'll receive an STK push on your phone\n"
                 f"Your message: '{message_body}'"
             )
         elif any(word in message_lower for word in ['balance', 'check']):
@@ -107,10 +327,14 @@ def process_whatsapp_message(message_data):
             response_text = (
                 f"👋 {greeting}I'm your M-Pesa assistant.\n\n"
                 f"I can help you:\n"
-                f"💰 Send money via M-Pesa\n"
+                f"💰 Make M-Pesa payments from your number\n"
                 f"💳 Check payment status\n"
                 f"📊 View transaction history\n\n"
-                f"Try: 'Send 100 to 0712345678'"
+                f"Payment examples:\n"
+                f"• 'Send 500' - Pay 500 KSh\n"
+                f"• 'Send 1000 to 0712345678' - Pay 1000 KSh\n"
+                f"• 'Pay 200' - Pay 200 KSh\n\n"
+                f"You'll get an STK push on your phone! 📱"
             )
         else:
             response_text = (
@@ -122,7 +346,7 @@ def process_whatsapp_message(message_data):
                 f"Try: 'Send 500 to 0712345678' or 'Help'"
             )
 
-        print(f"🤖 Agent response: {response_text}")
+        print(f"🤖 Fallback response: {response_text}")
         return response_text
 
     except Exception as e:
@@ -537,6 +761,28 @@ def check_twilio_config():
         else:
             print(f"   💡 Using custom WhatsApp Business number")
 
+def check_agent_api():
+    """Check AI Agent API connectivity"""
+    agent_api_url = os.getenv('AGENT_API_URL', 'http://localhost:8000')
+
+    print(f"\n🤖 AI Agent API Configuration:")
+    print(f"   API URL: {agent_api_url}")
+
+    try:
+        # Test connectivity to the agent API
+        response = requests.get(f"{agent_api_url}/docs", timeout=3)
+        if response.status_code == 200:
+            print(f"   ✅ Agent API is running and accessible")
+        else:
+            print(f"   ⚠️  Agent API responded with status: {response.status_code}")
+    except requests.exceptions.ConnectionError:
+        print(f"   ❌ Agent API not accessible - make sure main.py is running")
+        print(f"   💡 Start with: python app/main.py")
+    except Exception as e:
+        print(f"   ⚠️  Agent API check failed: {e}")
+
+    print(f"   💡 Agent API provides intelligent M-Pesa responses")
+
 if __name__ == '__main__':
     print("🚀 Starting Unified Webhook Server (M-Pesa + WhatsApp)...")
     print("📝 Logs will be saved to: logs/")
@@ -552,6 +798,9 @@ if __name__ == '__main__':
 
     # Check Twilio configuration
     check_twilio_config()
+
+    # Check AI Agent API
+    check_agent_api()
 
     print("\n�💡 Don't forget to expose this with ngrok!")
     print("   Example: ngrok http 5455")
