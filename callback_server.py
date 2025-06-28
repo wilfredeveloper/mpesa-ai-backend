@@ -10,6 +10,14 @@ import datetime
 import os
 from pathlib import Path
 
+# Import the callback manager
+try:
+    from mpesa_agent.callback_manager import callback_manager
+    CALLBACK_MANAGER_AVAILABLE = True
+except ImportError:
+    print("⚠️  Callback manager not available - running in basic mode")
+    CALLBACK_MANAGER_AVAILABLE = False
+
 app = Flask(__name__)
 
 # Create logs directory if it doesn't exist
@@ -52,53 +60,69 @@ def home():
 
 @app.route('/mpesa/callback', methods=['POST'])
 def mpesa_callback():
-    """Handle M-Pesa STK Push callbacks"""
+    """Handle M-Pesa STK Push callbacks with real-time agent integration"""
     try:
         # Get the JSON data from M-Pesa
         callback_data = request.get_json()
-        
+
         if not callback_data:
             return jsonify({"ResultCode": 1, "ResultDesc": "No data received"}), 400
-        
+
         # Log the callback
         log_callback(callback_data, "STK_PUSH_CALLBACK")
-        
+
         # Extract key information
         body = callback_data.get('Body', {})
         stk_callback = body.get('stkCallback', {})
-        
+
         result_code = stk_callback.get('ResultCode')
         result_desc = stk_callback.get('ResultDesc')
         merchant_request_id = stk_callback.get('MerchantRequestID')
         checkout_request_id = stk_callback.get('CheckoutRequestID')
-        
+
         print(f"Payment Result: {result_desc} (Code: {result_code})")
         print(f"Merchant Request ID: {merchant_request_id}")
         print(f"Checkout Request ID: {checkout_request_id}")
-        
+
         # If payment was successful, extract more details
         if result_code == 0:
             callback_metadata = stk_callback.get('CallbackMetadata', {})
             items = callback_metadata.get('Item', [])
-            
+
             payment_details = {}
             for item in items:
                 name = item.get('Name')
                 value = item.get('Value')
                 payment_details[name] = value
-            
+
             print(f"Payment Details: {payment_details}")
-        
+
+        # 🚀 NEW: Process callback through callback manager for real-time agent integration
+        if CALLBACK_MANAGER_AVAILABLE:
+            try:
+                manager_result = callback_manager.process_callback(callback_data)
+                print(f"📡 Callback Manager Result: {manager_result}")
+
+                # Add manager result to log
+                log_callback({
+                    "callback_data": callback_data,
+                    "manager_result": manager_result
+                }, "AGENT_INTEGRATION")
+
+            except Exception as e:
+                print(f"⚠️  Error in callback manager: {e}")
+                log_callback({"error": str(e), "callback_data": callback_data}, "MANAGER_ERROR")
+
         # Respond to M-Pesa (important!)
         return jsonify({
             "ResultCode": 0,
             "ResultDesc": "Callback received successfully"
         })
-        
+
     except Exception as e:
         print(f"Error processing callback: {e}")
         log_callback({"error": str(e), "raw_data": request.get_data(as_text=True)}, "ERROR")
-        
+
         return jsonify({
             "ResultCode": 1,
             "ResultDesc": f"Error processing callback: {str(e)}"
@@ -123,13 +147,84 @@ def mpesa_timeout():
             "ResultDesc": f"Error processing timeout: {str(e)}"
         }), 500
 
+@app.route('/payment/status/<checkout_request_id>')
+def get_payment_status(checkout_request_id):
+    """Get real-time payment status for agent integration"""
+    if not CALLBACK_MANAGER_AVAILABLE:
+        return jsonify({
+            "status": "error",
+            "message": "Callback manager not available"
+        }), 503
+
+    try:
+        result = callback_manager.get_payment_status(checkout_request_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Error getting payment status: {str(e)}"
+        }), 500
+
+@app.route('/payment/register', methods=['POST'])
+def register_payment():
+    """Register a payment for tracking"""
+    if not CALLBACK_MANAGER_AVAILABLE:
+        return jsonify({
+            "status": "error",
+            "message": "Callback manager not available"
+        }), 503
+
+    try:
+        data = request.get_json()
+        required_fields = ['checkout_request_id', 'phone_number', 'amount', 'description']
+
+        if not all(field in data for field in required_fields):
+            return jsonify({
+                "status": "error",
+                "message": f"Missing required fields: {required_fields}"
+            }), 400
+
+        result = callback_manager.register_payment(
+            data['checkout_request_id'],
+            data['phone_number'],
+            data['amount'],
+            data['description']
+        )
+
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Error registering payment: {str(e)}"
+        }), 500
+
+@app.route('/payment/wait/<checkout_request_id>')
+def wait_for_payment(checkout_request_id):
+    """Wait for payment completion with timeout"""
+    if not CALLBACK_MANAGER_AVAILABLE:
+        return jsonify({
+            "status": "error",
+            "message": "Callback manager not available"
+        }), 503
+
+    try:
+        timeout = request.args.get('timeout', 300, type=int)  # Default 5 minutes
+        result = callback_manager.wait_for_payment_completion(checkout_request_id, timeout)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Error waiting for payment: {str(e)}"
+        }), 500
+
 @app.route('/health')
 def health_check():
     """Health check endpoint"""
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.datetime.now().isoformat(),
-        "service": "M-Pesa Callback Server"
+        "service": "M-Pesa Callback Server",
+        "callback_manager": "available" if CALLBACK_MANAGER_AVAILABLE else "unavailable"
     })
 
 @app.route('/logs')
