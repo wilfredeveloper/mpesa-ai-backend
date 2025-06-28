@@ -1,95 +1,125 @@
 # AI M-Pesa Payment Agent
 
-An AI-powered agent that can process M-Pesa payments through natural language commands using Google's ADK and Safaricom's Daraja API.
+An AI-powered FastAPI server with CLI interface that can process M-Pesa payments through natural language commands using Google's ADK and Safaricom's Daraja API.
 
 ## Features
 
-- **M-Pesa Integration**: Send payments, check transaction status, validate phone numbers
-- **AI-Powered**: Uses Google Gemini 2.0 Flash for natural language understanding
-- **Phone Validation**: Validates and formats Kenyan phone numbers
-- **Transaction Tracking**: Check payment status and get account balance
-- **Simple Tools**: Easy-to-use functions that integrate with the AI agent
+- **🚀 FastAPI Server**: REST API with session management and agent interaction
+- **💬 Beautiful CLI**: Clean command-line interface with filtered logs and token counting
+- **💰 M-Pesa Integration**: Send payments, check transaction status, validate phone numbers
+- **🤖 AI-Powered**: Uses Google Gemini 2.0 Flash for natural language understanding
+- **📱 Phone Validation**: Validates and formats Kenyan phone numbers
+- **📊 Transaction Tracking**: Real-time payment status and account balance
+- **💾 SQLite Database**: Simple session persistence without external dependencies
 
 ## Quick Start
 
 ### 1. Install Dependencies
 
 ```bash
+# Activate virtual environment (if using one)
+source env/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Configure M-Pesa Credentials
+### 2. Run the Application
 
-1. The project uses a single `.env` file in the root directory for all configuration.
+**CLI Mode (Beautiful Interface):**
+```bash
+python app/main.py cli
+```
 
-2. Get your M-Pesa credentials from [Safaricom Developer Portal](https://developer.safaricom.co.ke/):
-   - Consumer Key
-   - Consumer Secret
-   - Business Short Code
-   - Passkey
+**Server Mode (REST API):**
+```bash
+python app/main.py
+# Server will start at http://localhost:8000
+# API docs at http://localhost:8000/docs
+```
 
-3. Update `.env` with your credentials:
+### 3. Configure M-Pesa (Optional)
+
+For actual M-Pesa payments, configure your credentials:
+
+1. Get credentials from [Safaricom Developer Portal](https://developer.safaricom.co.ke/)
+2. Update `.env` file:
    ```env
-   MPESA_CONSUMER_KEY=your_actual_consumer_key
-   MPESA_CONSUMER_SECRET=your_actual_consumer_secret
+   MPESA_CONSUMER_KEY=your_consumer_key
+   MPESA_CONSUMER_SECRET=your_consumer_secret
    MPESA_BUSINESS_SHORT_CODE=your_shortcode
    MPESA_PASSKEY=your_passkey
    MPESA_CALLBACK_URL=https://your-domain.com/mpesa/callback
    MPESA_ENVIRONMENT=sandbox
    ```
 
-### 3. Test the Integration
+## 📚 Documentation
 
-Run the test script to verify everything works:
+For detailed documentation, examples, and setup guides, see the **[docs/](docs/)** folder:
 
-```bash
-python test_mpesa.py
-```
+- **[API Examples](docs/api_examples.md)** - Complete API usage examples
+- **[CLI Demo](docs/cli_demo.md)** - Beautiful CLI interface demonstration
+- **[Setup Guides](docs/)** - Docker, Ngrok, and M-Pesa integration guides
 
-### 4. Use the Agent
-
-Run the agent with Google ADK:
-```bash
-source env/bin/activate
-adk web
-```
+## 💬 Usage Examples
 
 The agent can handle natural language commands like:
-- "Send 100 KSh to 0712345678"
+- "Send 500 KSh to 0712345678 for lunch"
 - "Check the status of transaction ABC123"
-- "Validate this phone number: +254712345678"
+- "What's my M-Pesa balance?"
+- "Send 1000 to 0722123456 for rent payment"
 
-## Available Tools
+### CLI Example:
+```
+💬 You: send 500 to 0712345678 for lunch
 
-The agent includes these M-Pesa tools:
-
-### `send_mpesa_payment(phone_number, amount, description)`
-Initiates an STK Push payment request.
-
-**Example:**
-```python
-result = send_mpesa_payment("254712345678", 100.0, "Payment for services")
+🤖 Agent:
+────────────────────────────────────────────────────────────
+  I'll help you send 500 KSh to 0712345678 for lunch right away!
+  📱 Initiating M-Pesa payment...
+  ✅ STK push sent successfully!
+────────────────────────────────────────────────────────────
+💡 Tokens: 1,247
 ```
 
-### `check_mpesa_payment_status(checkout_request_id)`
-Checks the status of a payment transaction.
-
-**Example:**
-```python
-status = check_mpesa_payment_status("ws_CO_123456789")
+### API Example:
+```bash
+curl -X POST http://localhost:8000/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user123",
+    "session_id": "session456",
+    "message": "Send 500 KSh to 0712345678 for lunch"
+  }'
 ```
 
-### `validate_kenyan_phone(phone_number)`
-Validates and formats Kenyan phone numbers.
+## 🛠️ API Endpoints
 
-**Example:**
-```python
-result = validate_kenyan_phone("0712345678")
-# Returns: {"status": "success", "formatted_number": "254712345678"}
-```
+### Session Management
+- `POST /sessions` - Create a new session
+- `GET /sessions` - List all sessions
+- `GET /sessions/{session_id}` - Get specific session
+- `DELETE /sessions/{session_id}` - Delete session
 
-### `get_mpesa_balance()`
-Gets the current business account balance.
+### Agent Interaction
+- `POST /run` - Send message to agent and get response
+- `GET /health` - Health check endpoint
+
+### Legacy Endpoints (ADK Compatible)
+- `POST /apps/{app_name}/users/{user_id}/sessions/{session_id}` - Create session with ID
+- `GET /apps/{app_name}/users/{user_id}/sessions/{session_id}` - Get session by ID
+
+## 🔧 Available M-Pesa Tools
+
+The AI agent has access to these M-Pesa tools:
+
+- **`send_instant_payment()`** - Primary tool with real-time tracking
+- **`send_instant_payment_with_tracking()`** - Advanced tracking options
+- **`check_payment_status_realtime()`** - Real-time status checks
+- **`send_mpesa_payment()`** - Legacy payment initiation
+- **`get_mpesa_balance()`** - Account balance inquiries
+
+The agent automatically chooses the right tool based on your natural language request.
 
 ## Environment Variables
 
@@ -109,13 +139,14 @@ Gets the current business account balance.
 - Implement proper callback URL handling for production
 - Consider implementing additional security measures for production use
 
-## Next Steps
+## 🚀 Features
 
-1. **Test with sandbox**: Use Safaricom's test credentials to test the integration
-2. **Add callback handling**: Implement webhook endpoints to handle M-Pesa callbacks
-3. **Add WhatsApp integration**: Connect with Twilio or similar service
-4. **Enhance NLP**: Add more sophisticated command parsing
-5. **Add contact resolution**: Implement contact name to phone number mapping
+- **Zero Complexity**: Simple setup with SQLite database
+- **Beautiful CLI**: Clean interface with filtered logs and token counting
+- **Session Persistence**: Automatic session management and history
+- **Real-time Payments**: Instant M-Pesa processing with callback integration
+- **RESTful API**: Complete FastAPI server with auto-generated docs
+- **AI-Powered**: Smart payment description inference from context
 
 ## Troubleshooting
 
