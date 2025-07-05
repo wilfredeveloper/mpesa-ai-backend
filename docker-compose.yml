@@ -12,7 +12,7 @@ services:
       - PYTHONPATH=/app
       - PORT=8000
       # Database
-      - DATABASE_URL=sqlite:///./mpesa_sessions.db
+      - DATABASE_URL=sqlite:///./data/mpesa_sessions.db
       # M-Pesa Configuration (override with your values)
       - MPESA_ENVIRONMENT=${MPESA_ENVIRONMENT:-sandbox}
       - MPESA_CONSUMER_KEY=${MPESA_CONSUMER_KEY}
@@ -28,8 +28,7 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GOOGLE_GENAI_USE_VERTEXAI=${GOOGLE_GENAI_USE_VERTEXAI:-0}
     volumes:
-      - ./logs:/app/logs
-      - ./mpesa_sessions.db:/app/mpesa_sessions.db
+      - app_data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -37,3 +36,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+
+volumes:
+  app_data:
