@@ -5,8 +5,8 @@ services:
     build: .
     container_name: aichatmpesa-backend
     ports:
-      - "8000:8000"  # AI Agent API
-      - "5455:5455"  # Webhook Server
+      - "3000:8000"  # AI Agent API (external:internal)
+      - "3001:5455"  # Webhook Server (external:internal)
     environment:
       # Core application settings
       - PYTHONPATH=/app
