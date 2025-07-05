@@ -4,15 +4,16 @@ services:
   aichatmpesa-backend:
     build: .
     container_name: aichatmpesa-backend
+    # Let Coolify assign ports automatically
     expose:
-      - "3000"  # AI Agent API
-      - "3001"  # Webhook Server
+      - "8000"  # AI Agent API
+      - "5455"  # Webhook Server
     environment:
       # Core application settings
       - PYTHONPATH=/app
-      - PORT=3000
+      - PORT=8000
       # Database
-      - DATABASE_URL=sqlite:///./data/mpesa_sessions.db
+      - DATABASE_URL=sqlite:///./mpesa_sessions.db
       # M-Pesa Configuration (override with your values)
       - MPESA_ENVIRONMENT=${MPESA_ENVIRONMENT:-sandbox}
       - MPESA_CONSUMER_KEY=${MPESA_CONSUMER_KEY}
@@ -28,14 +29,12 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GOOGLE_GENAI_USE_VERTEXAI=${GOOGLE_GENAI_USE_VERTEXAI:-0}
     volumes:
-      - app_data:/app/data
+      - ./logs:/app/logs
+      - ./mpesa_sessions.db:/app/mpesa_sessions.db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
-
-volumes:
-  app_data:
