@@ -40,4 +40,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:3343/health || exit 1
 
 # Use supervisor to run both services
-CMD ["/start.sh"]
+CMD ["/app/docker/start.sh"]

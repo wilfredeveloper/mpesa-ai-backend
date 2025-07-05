@@ -7,8 +7,8 @@ echo "=================================================="
 sleep 2
 
 echo "📊 Environment Check:"
-echo "   🤖 AI Agent API: Will start on port 8000"
-echo "   📱 Webhook Server: Will start on port 5455"
+echo "   🤖 AI Agent API: Will start on port 3343"
+echo "   📱 Webhook Server: Will start on port 3344"
 echo "   📂 Database: SQLite (mpesa_sessions.db)"
 echo "   📝 Logs: /app/logs/"
 
