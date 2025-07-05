@@ -28,9 +28,9 @@ RUN mkdir -p logs data /var/log/supervisor
 # Copy supervisor configuration
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Copy startup script
-COPY docker/start.sh /start.sh
-RUN chmod +x /start.sh
+# Copy startup script and make it executable
+COPY docker/start.sh /app/docker/start.sh
+RUN chmod +x /app/docker/start.sh
 
 # Expose ports (AI Agent API and Webhook Server)
 EXPOSE 3343 3344
