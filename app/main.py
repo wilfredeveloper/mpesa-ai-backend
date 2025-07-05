@@ -539,16 +539,20 @@ if __name__ == "__main__":
     else:
         # Run FastAPI server with normal logging
         logger = setup_logging(quiet_mode=False)
+
+        # Get port from environment variable or default to 8000
+        port = int(os.getenv("PORT", 8000))
+
         print("\n🚀 Starting Mpesa Agent FastAPI Server")
         print("=" * 50)
         print(f"📊 Database: {DATABASE_URL}")
         print(f"🤖 Agent: {'✅ Available' if root_agent is not None else '❌ Not Available'}")
-        print(f"🌐 Server: http://localhost:8000")
-        print(f"📚 Docs: http://localhost:8000/docs")
+        print(f"🌐 Server: http://localhost:{port}")
+        print(f"📚 Docs: http://localhost:{port}/docs")
         print("=" * 50)
         uvicorn.run(
             "app.main:app",
             host="0.0.0.0",
-            port=8000,
+            port=port,
             reload=True
         )

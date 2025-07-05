@@ -629,15 +629,18 @@ def check_agent_api():
     print(f"   💡 Agent API provides intelligent M-Pesa responses")
 
 if __name__ == '__main__':
+    # Get port from environment variable or default to 5455
+    port = int(os.getenv("PORT", 5455))
+
     print("🚀 Starting Unified Webhook Server (M-Pesa + WhatsApp)...")
     print("📝 Logs will be saved to: logs/")
-    print("🌐 Access the server at: http://localhost:5455")
-    print("\n📱 M-Pesa Endpoints:")
-    print("   📞 Callback URL: http://localhost:5455/mpesa/callback")
-    print("   ⏰ Timeout URL: http://localhost:5455/mpesa/timeout")
-    print("\n💬 WhatsApp Endpoints:")
-    print("   📨 Webhook URL: http://localhost:5455/whatsapp/webhook")
-    print("   � Status URL: http://localhost:5455/whatsapp/status")
+    print(f"🌐 Access the server at: http://localhost:{port}")
+    print(f"\n📱 M-Pesa Endpoints:")
+    print(f"   📞 Callback URL: http://localhost:{port}/mpesa/callback")
+    print(f"   ⏰ Timeout URL: http://localhost:{port}/mpesa/timeout")
+    print(f"\n💬 WhatsApp Endpoints:")
+    print(f"   📨 Webhook URL: http://localhost:{port}/whatsapp/webhook")
+    print(f"   � Status URL: http://localhost:{port}/whatsapp/status")
     print(f"\n🤖 Agent Available: {'✅ Yes' if AGENT_AVAILABLE else '❌ No'}")
     print(f"📡 Callback Manager: {'✅ Yes' if CALLBACK_MANAGER_AVAILABLE else '❌ No'}")
 
@@ -647,7 +650,7 @@ if __name__ == '__main__':
     # Check AI Agent API
     check_agent_api()
 
-    print("\n�💡 Don't forget to expose this with ngrok!")
-    print("   Example: ngrok http 5455")
+    print(f"\n�💡 Don't forget to expose this with ngrok!")
+    print(f"   Example: ngrok http {port}")
 
-    app.run(host='0.0.0.0', port=5455, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=True)
