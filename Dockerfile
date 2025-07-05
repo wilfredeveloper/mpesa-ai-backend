@@ -4,7 +4,7 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    PORT=3000
+    PORT=3343
 
 # Set work directory
 WORKDIR /app
@@ -33,11 +33,11 @@ COPY docker/start.sh /start.sh
 RUN chmod +x /start.sh
 
 # Expose ports (AI Agent API and Webhook Server)
-EXPOSE 3000 3001
+EXPOSE 3343 3344
 
 # Health check for AI Agent API
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+    CMD curl -f http://localhost:3343/health || exit 1
 
 # Use supervisor to run both services
 CMD ["/start.sh"]
