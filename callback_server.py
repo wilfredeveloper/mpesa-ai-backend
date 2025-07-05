@@ -19,6 +19,8 @@ except ImportError:
     print("⚠️  Callback manager not available - running in basic mode")
     CALLBACK_MANAGER_AVAILABLE = False
 
+
+
 # Import the agent for processing WhatsApp messages
 try:
     from app.mpesa_agent.agent import root_agent
@@ -75,6 +77,7 @@ def call_ai_agent(user_id, message, profile_name=None, phone_number=None):
             "user_id": user_id,
             "session_id": session_id,
             "state": {
+                "sender_phone_number": phone_number,  # State variable for agent prompt
                 "user_profile": {
                     "name": profile_name,
                     "phone": phone_number,
@@ -162,117 +165,15 @@ def extract_agent_response(events):
         print(f"❌ Error extracting agent response: {e}")
         return None
 
-def handle_payment_request(message, sender_phone, profile_name):
-    """Handle payment requests like 'Send 1000 to 0714025354' by initiating STK to sender"""
-    try:
-        import re
 
-        # Pattern to match payment requests: "send/pay [amount] to [number]"
-        payment_patterns = [
-            r'(?:send|pay|transfer)\s+(\d+)\s+(?:to|for)\s+(\d+)',  # "send 1000 to 0714025354"
-            r'(?:send|pay|transfer)\s+(\d+)',  # "send 1000" (simplified)
-            r'(\d+)\s+(?:to|for)\s+(\d+)',  # "1000 to 0714025354" (no verb)
-        ]
-
-        message_lower = message.lower().strip()
-        amount = None
-        recipient_number = None
-
-        # Try to match payment patterns
-        for pattern in payment_patterns:
-            match = re.search(pattern, message_lower)
-            if match:
-                amount = int(match.group(1))
-                if len(match.groups()) > 1:
-                    recipient_number = match.group(2)
-                break
-
-        # If no payment pattern found, return None
-        if not amount:
-            return None
-
-        print(f"💰 Payment request detected: {amount} KSh from {profile_name} ({sender_phone})")
-
-        # Import M-Pesa tools
-        try:
-            from app.mpesa_agent.mpesa_tools import initiate_stk_push
-        except ImportError as e:
-            print(f"❌ Could not import M-Pesa tools: {e}")
-            return f"❌ Hi {profile_name}! M-Pesa integration is not available right now. Please try again later."
-
-        # Clean sender phone number (remove whatsapp: prefix, ensure proper format)
-        clean_sender_phone = sender_phone.replace('whatsapp:', '').replace('+', '')
-
-        # For now, we initiate STK push to the sender (not peer-to-peer)
-        greeting = f"Hi {profile_name}! " if profile_name else "Hello! "
-
-        if recipient_number:
-            # User specified a recipient, but we'll charge the sender instead
-            response_msg = (
-                f"{greeting}I'll initiate a payment of {amount} KSh from your number.\n\n"
-                f"📱 You'll receive an STK push prompt on {sender_phone}\n"
-                f"💡 Note: Direct transfers aren't supported yet, so the payment will be from your account.\n\n"
-                f"Processing payment..."
-            )
-        else:
-            # Simple payment request
-            response_msg = (
-                f"{greeting}I'll initiate a payment of {amount} KSh from your number.\n\n"
-                f"📱 You'll receive an STK push prompt on {sender_phone}\n\n"
-                f"Processing payment..."
-            )
-
-        # Initiate STK push to sender
-        try:
-            stk_result = initiate_stk_push(
-                phone_number=clean_sender_phone,
-                amount=amount,
-                account_reference="WhatsApp Payment",
-                transaction_desc=f"Payment via WhatsApp - {amount} KSh"
-            )
-
-            if stk_result.get('status') == 'success':
-                checkout_request_id = stk_result.get('checkout_request_id')
-                success_msg = (
-                    f"✅ {greeting}Payment request sent successfully!\n\n"
-                    f"💰 Amount: {amount} KSh\n"
-                    f"📱 Check your phone for M-Pesa prompt\n"
-                    f"🔢 Reference: {checkout_request_id[:8]}...\n\n"
-                    f"Complete the payment on your phone to proceed."
-                )
-                return success_msg
-            else:
-                error_msg = stk_result.get('error_message', 'Unknown error')
-                failure_msg = (
-                    f"❌ {greeting}Payment initiation failed.\n\n"
-                    f"💰 Amount: {amount} KSh\n"
-                    f"📝 Error: {error_msg}\n\n"
-                    f"Please try again or check your phone number."
-                )
-                return failure_msg
-
-        except Exception as e:
-            print(f"❌ STK push error: {e}")
-            error_msg = (
-                f"❌ {greeting}Sorry, there was an error processing your payment.\n\n"
-                f"💰 Amount: {amount} KSh\n"
-                f"📝 Error: {str(e)}\n\n"
-                f"Please try again later."
-            )
-            return error_msg
-
-    except Exception as e:
-        print(f"❌ Error handling payment request: {e}")
-        return None
 
 def process_whatsapp_message(message_data):
-    """Process incoming WhatsApp message with the AI agent via API"""
+    """Process incoming WhatsApp message directly with the AI agent - SIMPLIFIED"""
     try:
-        # Extract message details with personalization
+        # Extract message details
         from_number = message_data.get('From', '').replace('whatsapp:', '')
         message_body = message_data.get('Body', '').strip()
-        message_sid = message_data.get('MessageSid', '')
-        profile_name = message_data.get('ProfileName', '')  # Get user's WhatsApp name
+        profile_name = message_data.get('ProfileName', '')
         wa_id = message_data.get('WaId', '')
 
         print(f"📱 Processing WhatsApp message from {profile_name} ({from_number}): {message_body}")
@@ -281,16 +182,10 @@ def process_whatsapp_message(message_data):
             greeting = f"Hi {profile_name}! " if profile_name else "Hello! "
             return f"👋 {greeting}I'm your M-Pesa assistant. Send me a message like 'send 500 to 0712345678' to make payments!"
 
-        # Check if this is a payment request first
-        payment_result = handle_payment_request(message_body, from_number, profile_name)
-        if payment_result:
-            print(f"💰 Payment request processed: {payment_result}")
-            return payment_result
-
-        # Try to integrate with AI agent API for other requests
+        # SIMPLIFIED: Always call AI agent directly - let it handle everything
         try:
             agent_response = call_ai_agent(
-                user_id=wa_id or from_number,  # Use WhatsApp ID or phone as user ID
+                user_id=wa_id or from_number,
                 message=message_body,
                 profile_name=profile_name,
                 phone_number=from_number
@@ -300,54 +195,12 @@ def process_whatsapp_message(message_data):
                 print(f"🤖 AI Agent response: {agent_response}")
                 return agent_response
             else:
-                print("⚠️  AI Agent returned empty response, using fallback")
+                print("⚠️ AI Agent returned empty response")
+                return f"❌ Sorry, I couldn't process your message. Please try again."
 
         except Exception as e:
-            print(f"⚠️  AI Agent API error: {e}")
-            print("   Falling back to simple responses...")
-
-        # Fallback to simple responses if AI agent fails
-        greeting = f"Hi {profile_name}! " if profile_name else "Hello! "
-        message_lower = message_body.lower()
-
-        if any(word in message_lower for word in ['send', 'pay', 'transfer', 'mpesa']):
-            response_text = (
-                f"💰 {greeting}I can help you with M-Pesa payments!\n\n"
-                f"To make a payment, use this format:\n"
-                f"'Send [amount]' or 'Send [amount] to [number]'\n\n"
-                f"Examples:\n"
-                f"• 'Send 500' - Pay 500 KSh from your number\n"
-                f"• 'Send 1000 to 0712345678' - Pay 1000 KSh\n\n"
-                f"💡 You'll receive an STK push on your phone\n"
-                f"Your message: '{message_body}'"
-            )
-        elif any(word in message_lower for word in ['balance', 'check']):
-            response_text = f"💳 {greeting}I can help you check your M-Pesa balance! This feature will be available soon."
-        elif any(word in message_lower for word in ['help', 'hi', 'hello', 'start']):
-            response_text = (
-                f"👋 {greeting}I'm your M-Pesa assistant.\n\n"
-                f"I can help you:\n"
-                f"💰 Make M-Pesa payments from your number\n"
-                f"💳 Check payment status\n"
-                f"📊 View transaction history\n\n"
-                f"Payment examples:\n"
-                f"• 'Send 500' - Pay 500 KSh\n"
-                f"• 'Send 1000 to 0712345678' - Pay 1000 KSh\n"
-                f"• 'Pay 200' - Pay 200 KSh\n\n"
-                f"You'll get an STK push on your phone! 📱"
-            )
-        else:
-            response_text = (
-                f"🤖 {greeting}I received: '{message_body}'\n\n"
-                f"I'm your M-Pesa assistant! I can help with:\n"
-                f"• Sending money\n"
-                f"• Checking balances\n"
-                f"• Payment status\n\n"
-                f"Try: 'Send 500 to 0712345678' or 'Help'"
-            )
-
-        print(f"🤖 Fallback response: {response_text}")
-        return response_text
+            print(f"❌ AI Agent error: {e}")
+            return f"❌ Sorry, I encountered an error. Please try again."
 
     except Exception as e:
         print(f"❌ Error processing WhatsApp message: {e}")
@@ -469,16 +322,49 @@ def mpesa_callback():
 
             print(f"Payment Details: {payment_details}")
 
-        # 🚀 NEW: Process callback through callback manager for real-time agent integration
+
+
+        # 🚀 Process callback through callback manager for real-time agent integration
         if CALLBACK_MANAGER_AVAILABLE:
             try:
                 manager_result = callback_manager.process_callback(callback_data)
                 print(f"📡 Callback Manager Result: {manager_result}")
 
+                # SIMPLIFIED: If payment completed, notify user via AI agent
+                if manager_result.get('status') == 'success' and manager_result.get('payment_info'):
+                    payment_info = manager_result['payment_info']
+                    phone_number = payment_info.get('phone_number')
+
+                    if phone_number:
+                        # Create a natural message about the payment completion
+                        if payment_info.get('status') == 'success':
+                            completion_message = f"Payment completed successfully! Transaction details: {payment_info.get('payment_details', {})}"
+                        elif payment_info.get('status') == 'failed':
+                            completion_message = f"Payment failed: {payment_info.get('error_message', 'Unknown error')}"
+                        else:
+                            completion_message = f"Payment status update: {payment_info.get('status')}"
+
+                        # Send completion notification via AI agent
+                        try:
+                            agent_response = call_ai_agent(
+                                user_id=phone_number,
+                                message=completion_message,
+                                profile_name=None,  # We don't have profile name from callback
+                                phone_number=phone_number
+                            )
+
+                            if agent_response:
+                                # Send the agent's response to WhatsApp
+                                send_whatsapp_reply(phone_number, agent_response)
+                                print(f"✅ Payment completion notification sent via AI agent")
+                        except Exception as e:
+                            print(f"⚠️ Error sending payment completion via AI agent: {e}")
+
                 # Add manager result to log
                 log_callback({
                     "callback_data": callback_data,
-                    "manager_result": manager_result
+                    "manager_result": manager_result,
+                    "callback_tracking": True
                 }, "AGENT_INTEGRATION")
 
             except Exception as e:
@@ -581,47 +467,6 @@ def whatsapp_status():
         print(f"Error processing WhatsApp status: {e}")
         return f"Error: {str(e)}", 500
 
-@app.route('/whatsapp/test', methods=['GET', 'POST'])
-def whatsapp_test():
-    """Test endpoint for WhatsApp integration"""
-    if request.method == 'GET':
-        return """
-        <h2>WhatsApp Test Endpoint</h2>
-        <p>Send a POST request with form data to test message processing:</p>
-        <form method="POST">
-            <label>From (phone number):</label><br>
-            <input type="text" name="From" value="whatsapp:+254712345678" style="width: 300px;"><br><br>
-
-            <label>Body (message):</label><br>
-            <textarea name="Body" style="width: 300px; height: 100px;">Hello, I want to send 500 to 0712345678</textarea><br><br>
-
-            <label>MessageSid:</label><br>
-            <input type="text" name="MessageSid" value="test-message-123" style="width: 300px;"><br><br>
-
-            <input type="submit" value="Test Message Processing">
-        </form>
-        """
-
-    try:
-        # Process as if it's a real webhook
-        test_data = request.form.to_dict()
-        log_callback(test_data, "WHATSAPP_TEST")
-
-        # Process the message
-        response = process_whatsapp_message(test_data)
-
-        return f"""
-        <h2>Test Result</h2>
-        <h3>Input:</h3>
-        <pre>{json.dumps(test_data, indent=2)}</pre>
-        <h3>Agent Response:</h3>
-        <pre>{response}</pre>
-        <p><a href="/whatsapp/test">Test Again</a></p>
-        """
-
-    except Exception as e:
-        return f"<h2>Test Error</h2><p>{str(e)}</p>", 500
-
 @app.route('/payment/status/<checkout_request_id>')
 def get_payment_status(checkout_request_id):
     """Get real-time payment status for agent integration"""
@@ -683,7 +528,7 @@ def wait_for_payment(checkout_request_id):
         }), 503
 
     try:
-        timeout = request.args.get('timeout', 300, type=int)  # Default 5 minutes
+        timeout = request.args.get('timeout', 80, type=int)  # Default 80 seconds
         result = callback_manager.wait_for_payment_completion(checkout_request_id, timeout)
         return jsonify(result)
     except Exception as e:

@@ -198,7 +198,7 @@ class CallbackManager:
                 'message': f'No payment found with ID {checkout_request_id}'
             }
     
-    def wait_for_payment_completion(self, checkout_request_id: str, timeout_seconds: int = 300) -> Dict[str, Any]:
+    def wait_for_payment_completion(self, checkout_request_id: str, timeout_seconds: int = 80) -> Dict[str, Any]:
         """Wait for payment completion with timeout"""
         start_time = time.time()
         

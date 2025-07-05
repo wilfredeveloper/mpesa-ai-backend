@@ -3,7 +3,8 @@ FROM python:3.10-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PORT=8000
 
 # Set work directory
 WORKDIR /app
@@ -11,6 +12,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install dependencies
@@ -20,15 +22,22 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create logs directory
-RUN mkdir -p logs
+# Create necessary directories
+RUN mkdir -p logs /var/log/supervisor
 
-# Expose port
-EXPOSE 8001
+# Copy supervisor configuration
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8001/health || exit 1
+# Copy startup script
+COPY docker/start.sh /start.sh
+RUN chmod +x /start.sh
 
-# Run the callback server
-CMD ["python", "callback_server.py"]
+# Expose ports (AI Agent API and Webhook Server)
+EXPOSE 8000 5455
+
+# Health check for AI Agent API
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Use supervisor to run both services
+CMD ["/start.sh"]
