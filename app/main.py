@@ -345,18 +345,21 @@ async def agent_run(request: AgentRunRequest):
             }
 
             # Handle content
+                      # Handle content
             if event.content and event.content.parts:
                 parts = []
                 for part in event.content.parts:
-                    part_dict = {}
+                    part_dict = {} # Initialize part_dict here
                     if hasattr(part, 'text') and part.text:
-                        part_dict['text'] = part.text
+                        # Escape double quotes within the text to prevent JSON parsing errors on Android
+                        part_dict['text'] = part.text.replace('"', '\\"')
+                    # Add other attributes of 'part' to part_dict if necessary
                     parts.append(part_dict)
-
                 event_dict["content"] = {
                     "role": event.content.role,
                     "parts": parts
                 }
+
 
             events.append(event_dict)
 
